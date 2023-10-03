@@ -11,8 +11,11 @@ public:
     static ews::service get_service();
     static ews::mailbox get_mailbox();
     static ews::standard_folder get_standard_folder();
-    static void handle_action(ews::service& service);
-    static void search_folder(ews::service& service);
+    static void handle_action(ews::service &service);
+    static std::string get_folder_full_path(ews::service &service, ews::folder_id folder_id);
+    static ews::folder find_folder(ews::service &service);
+    static ews::folder find_folder(ews::service &service, ews::folder_id &folder);
+    static void search_folder(ews::service &service);
 
 private:
     static std::string _server_uri;
@@ -23,6 +26,8 @@ private:
     static std::string _option;
     static std::string _mailbox;
     static std::string _folder;
+    static std::string _standard_folder;
+    static std::string _parent_folder;
 };
 
 std::string EwsHandler::_server_uri;
@@ -33,6 +38,8 @@ std::string EwsHandler::_action;
 std::string EwsHandler::_option;
 std::string EwsHandler::_mailbox;
 std::string EwsHandler::_folder;
+std::string EwsHandler::_standard_folder;
+std::string EwsHandler::_parent_folder;
 
 void EwsHandler::init(const std::vector<std::string> &args)
 {
@@ -44,6 +51,8 @@ void EwsHandler::init(const std::vector<std::string> &args)
         {"--password", &EwsHandler::_password},
         {"--mailbox", &EwsHandler::_mailbox},
         {"--folder", &EwsHandler::_folder},
+        {"--standard-folder", &EwsHandler::_standard_folder},
+        {"--parent-folder", &EwsHandler::_parent_folder},
         {"--option", &EwsHandler::_option},
         {"--action", &EwsHandler::_action}};
 
@@ -85,7 +94,7 @@ ews::mailbox EwsHandler::get_mailbox()
 
 ews::standard_folder EwsHandler::get_standard_folder()
 {
-    std::string f = EwsHandler::_folder;
+    std::string f = EwsHandler::_standard_folder;
     if (f == "inbox")
     {
         return ews::standard_folder::inbox;
@@ -108,27 +117,121 @@ ews::standard_folder EwsHandler::get_standard_folder()
     }
 }
 
-void EwsHandler::search_folder(ews::service& service)
+std::string EwsHandler::get_folder_full_path(ews::service &service, ews::folder_id folder_id)
+{
+    ews::distinguished_folder_id start_folder = EwsHandler::get_standard_folder();
+    auto f = service.get_folder(folder_id);
+    std::string full_path = f.get_display_name();
+    try
+    {
+        auto sf = service.get_folder(start_folder);
+        auto pf = service.get_folder(f.get_parent_folder_id());
+        if (sf.get_display_name() == pf.get_display_name())
+        {
+            full_path = sf.get_display_name() + "<<" + full_path;
+        }
+        else
+        {
+            std::string parent_name = get_folder_full_path(service, f.get_parent_folder_id());
+            full_path = get_folder_full_path(service, f.get_parent_folder_id()) + "<<" + full_path;
+        }
+    }
+    catch (std::exception &exc)
+    {
+    }
+    return full_path;
+}
+
+ews::folder EwsHandler::find_folder(ews::service &service)
+{
+    ews::distinguished_folder_id parent_folder = EwsHandler::get_standard_folder();
+    auto sub_folder_ids = service.find_folder(parent_folder);
+    std::string folder_name = EwsHandler::_folder;
+    ews::folder folder;
+
+    // Now iterate over all sub folder and display their ID
+    for (auto &folder_id : sub_folder_ids)
+    {
+        auto f = service.get_folder(folder_id);
+        if (f.get_display_name() == folder_name)
+        {
+            std::cout << f.get_display_name() << std::endl;
+            folder = f;
+            break;
+        }
+        if (f.get_child_folder_count() > 0)
+        {
+            folder = EwsHandler::find_folder(service, folder_id);
+            try
+            {
+                folder.get_folder_id();
+            }
+            catch (std::exception &exc)
+            {
+                continue;
+            }
+        }
+    }
+    return folder;
+}
+
+ews::folder EwsHandler::find_folder(ews::service &service, ews::folder_id &parent_folder)
+{
+    auto sub_folder_ids = service.find_folder(parent_folder);
+    std::string folder_name = EwsHandler::_folder;
+    ews::folder folder;
+
+    // Now iterate over all sub folder and display their ID
+    for (auto &folder_id : sub_folder_ids)
+    {
+        auto f = service.get_folder(folder_id);
+        auto pf = service.get_folder(parent_folder);
+        if (f.get_display_name() == folder_name)
+        {
+            std::cout << EwsHandler::get_folder_full_path(service, folder_id) << std::endl;
+            folder = f;
+            break;
+        }
+        if (f.get_child_folder_count() > 0)
+        {
+            folder = EwsHandler::find_folder(service, folder_id);
+            try
+            {
+                folder.get_folder_id();
+            }
+            catch (std::exception &exc)
+            {
+                continue;
+            }
+        }
+    }
+    return folder;
+}
+
+void EwsHandler::search_folder(ews::service &service)
 {
     std::string mb = EwsHandler::_mailbox;
     std::string folder = EwsHandler::_folder;
     ews::distinguished_folder_id folder_id;
+    auto standard_folder = EwsHandler::get_standard_folder();
 
-
-    if (mb != "") {
-        // serach mailbox
+    if (mb != "")
+    {
+        // search mailbox
         auto mailbox = EwsHandler::get_mailbox();
-        auto folder = EwsHandler::get_standard_folder();
-        folder_id = ews::distinguished_folder_id(folder, mailbox);
+        folder_id = ews::distinguished_folder_id(standard_folder, mailbox);
     }
-    else {
+    else
+    {
         // search main account
+        folder_id = ews::distinguished_folder_id(standard_folder);
     }
 
     auto item_ids = service.find_item(folder_id);
     std::vector<EwsMailData> list = std::vector<EwsMailData>();
 
-    for (const auto& id : item_ids) {
+    for (const auto &id : item_ids)
+    {
         auto msg = service.get_message(id);
         auto data = EwsMailData(msg);
         list.push_back(data);
@@ -137,16 +240,19 @@ void EwsHandler::search_folder(ews::service& service)
         std::cout << j.dump(4) << std::endl;
         */
     }
-
 }
 
-void EwsHandler::handle_action(ews::service& service)
+void EwsHandler::handle_action(ews::service &service)
 {
     std::string a = EwsHandler::_action;
     std::string o = EwsHandler::_option;
 
     if (a == "create_folder")
     {
+    }
+    else if (a == "find_folder")
+    {
+        EwsHandler::find_folder(service);
     }
     else if (a == "delete_folder")
     {
