@@ -6,6 +6,8 @@
 
 #include <ews/ews.hpp>
 
+#include "lib/EwsErrorData.hpp"
+#include "lib/EwsFolderData.hpp"
 #include "lib/EwsMailData.hpp"
 #include "lib/EwsHandler.hpp"
 
@@ -20,9 +22,9 @@ int main(int argc, char *argv[])
         auto service = EwsHandler::get_service();
         EwsHandler::handle_action(service);
     }
-    catch (std::exception &exc)
+    catch (std::exception &ex)
     {
-        std::cout << exc.what() << std::endl;
+        std::cout << EwsErrorData(ex.what()).to_json().dump() << std::endl;
     }
 
     ews::tear_down();

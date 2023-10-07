@@ -73,7 +73,7 @@ void EwsMailData::from_message(ews::message& message)
 {
     _subject = message.get_subject();
     _body = message.get_body().content();
-    _sender = message.get_sender().value();
+    _sender = message.get_from().value();
     _recipients = std::vector<std::string>();
     auto recipients = message.get_to_recipients();
     for(const auto& r : recipients) {

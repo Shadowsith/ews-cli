@@ -1,8 +1,8 @@
 linux:
-	g++ -std=c++11 -I/usr/include  -L/usr/include main.cpp -o build/ews-cli -lcurl
+	g++ -std=c++17 -I/usr/include  -L/usr/include main.cpp -o build/ews-cli -lcurl
 
 test_linux:
-	g++ -std=c++11 -I/usr/include  -L/usr/include tests/test.cpp -o build/tests -lcurl
+	g++ -std=c++17 -I/usr/include  -L/usr/include tests/test.cpp -o build/tests -lcurl
 	./build/tests
 
 windows:
