@@ -5,6 +5,7 @@
 #include <exception>
 #include <unordered_map>
 #include <optional>
+#include <variant>
 #include <ews/ews.hpp>
 #include <nlohmann/json.hpp>
 
@@ -25,6 +26,8 @@ public:
     static ews::folder create_folder(ews::service &service, std::string &folder_path);
     static void get_mails(ews::service &service);
     static void get_mails(ews::service &service, std::string &folder_path);
+    static void search_mails(ews::service &service);
+    static void search_mails(ews::service &service, std::string &folder_path);
     // static bool delete_folder(ews::service &service, std::string folder_path);
 
 private:
@@ -39,11 +42,21 @@ private:
     static std::string _standard_folder;
     static std::string _parent_folder;
     static std::string _folder_path;
+    static std::string _dest_folder_path;
     static std::string _containment_mode;
+    static std::string _containment_comparison;
+    static std::string _item_property_path;
+    static std::string _search_type;
+    static std::string _search_filter;
+    static std::string _search_filter_type;
 
     static ews::containment_mode get_containment_mode();
-    static ews::contains get_search_expression();
+    static ews::containment_comparison get_containment_comparison();
+    static ews::property_path get_item_property_path();
+    static ews::search_expression get_search_expression();
+    static ews::is_equal_to get_is_equal_to(ews::property_path property_path, const std::string &value, std::string type);
     static std::vector<std::string> split(const std::string &s, char delimiter);
+    static std::variant<int, bool, const char *, ews::date_time> type_cast(const std::string &value, std::string type);
 };
 
 std::string EwsHandler::_server_uri;
@@ -57,7 +70,13 @@ std::string EwsHandler::_folder;
 std::string EwsHandler::_standard_folder;
 std::string EwsHandler::_parent_folder;
 std::string EwsHandler::_folder_path;
+std::string EwsHandler::_dest_folder_path;
 std::string EwsHandler::_containment_mode;
+std::string EwsHandler::_containment_comparison;
+std::string EwsHandler::_item_property_path;
+std::string EwsHandler::_search_type;
+std::string EwsHandler::_search_filter;
+std::string EwsHandler::_search_filter_type;
 
 void EwsHandler::init(const std::vector<std::string> &args)
 {
@@ -72,7 +91,13 @@ void EwsHandler::init(const std::vector<std::string> &args)
         {"--standard-folder", &EwsHandler::_standard_folder},
         {"--parent-folder", &EwsHandler::_parent_folder},
         {"--folder-path", &EwsHandler::_folder_path},
+        {"--dest-folder-path", &EwsHandler::_dest_folder_path},
         {"--containment-mode", &EwsHandler::_containment_mode},
+        {"--containment-comparison", &EwsHandler::_containment_comparison},
+        {"--item-property-path", &EwsHandler::_item_property_path},
+        {"--search-type", &EwsHandler::_search_type},
+        {"--search-filter", &EwsHandler::_search_filter},
+        {"--search-filter-type", &EwsHandler::_search_filter_type},
         {"--option", &EwsHandler::_option},
         {"--action", &EwsHandler::_action}};
 
@@ -85,17 +110,6 @@ void EwsHandler::init(const std::vector<std::string> &args)
             i++;                              // Überspringe den Wert
         }
     }
-
-    /*
-    std::cout << "URL: " << EwsHandler::_server_uri << std::endl;
-    std::cout << "D: " << EwsHandler::_domain << std::endl;
-    std::cout << "U: " << EwsHandler::_username << std::endl;
-    std::cout << "PW: " << EwsHandler::_password << std::endl;
-    std::cout << "Action: " << EwsHandler::_action << std::endl;
-    std::cout << "Option: " << EwsHandler::_option << std::endl;
-    std::cout << "Folder: " << EwsHandler::_folder << std::endl;
-    std::cout << "Mailbox: " << EwsHandler::_mailbox << std::endl;
-    */
 }
 
 ews::service EwsHandler::get_service()
@@ -394,7 +408,7 @@ void EwsHandler::get_mails(ews::service &service)
     for (const auto &id : item_ids)
     {
         auto msg = service.get_message(id);
-        auto data = EwsMailData(msg);
+        auto data = EwsMailData(service, msg);
         j += data.to_json();
     }
     std::cout << j.dump(4) << std::endl;
@@ -409,7 +423,66 @@ void EwsHandler::get_mails(ews::service &service, std::string &folder_path)
     for (const auto &id : item_ids)
     {
         auto msg = service.get_message(id);
-        auto data = EwsMailData(msg);
+        auto data = EwsMailData(service, msg);
+        list.push_back(data);
+        auto j = data.to_json();
+        std::cout << j.dump(4) << std::endl;
+    }
+}
+
+void EwsHandler::search_mails(ews::service &service)
+{
+    auto standard_folder_id = EwsHandler::get_standard_folder_id();
+    std::vector<ews::item_id> item_ids;
+
+    if (EwsHandler::_search_filter != "")
+    {
+        auto search_expression = EwsHandler::get_search_expression();
+        item_ids = service.find_item(standard_folder_id, search_expression);
+    }
+    else
+    {
+        item_ids = service.find_item(standard_folder_id);
+    }
+
+    std::vector<EwsMailData> list = std::vector<EwsMailData>();
+    nlohmann::json j;
+
+    for (const auto &id : item_ids)
+    {
+        auto msg = service.get_message(id);
+        auto data = EwsMailData(service, msg);
+        j += data.to_json();
+    }
+    std::cout << j.dump(4) << std::endl;
+}
+
+void EwsHandler::search_mails(ews::service &service, std::string &folder_path)
+{
+    auto folder = EwsHandler::find_folder(service, folder_path);
+    std::vector<ews::item_id> item_ids;
+
+    auto search_expression = EwsHandler::get_search_expression();
+    item_ids = service.find_item(folder.get_folder_id(), search_expression);
+
+    /*
+        if (EwsHandler::_search_filter != "")
+        {
+            auto search_expression = EwsHandler::get_search_expression();
+            item_ids = service.find_item(folder.get_folder_id(), search_expression);
+        }
+        else
+        {
+            item_ids = service.find_item(folder.get_folder_id());
+        }
+    */
+
+    std::vector<EwsMailData> list = std::vector<EwsMailData>();
+
+    for (const auto &id : item_ids)
+    {
+        auto msg = service.get_message(id);
+        auto data = EwsMailData(service, msg);
         list.push_back(data);
         auto j = data.to_json();
         std::cout << j.dump(4) << std::endl;
@@ -508,6 +581,28 @@ void EwsHandler::handle_action(ews::service &service)
             EwsHandler::get_mails(service, EwsHandler::_folder_path);
         }
     }
+    else if (a == "search_mails")
+    {
+        if (EwsHandler::_folder_path == "")
+        {
+            EwsHandler::search_mails(service);
+        }
+        else
+        {
+            EwsHandler::search_mails(service, EwsHandler::_folder_path);
+        }
+    }
+    else if (a == "move_mails")
+    {
+        if (EwsHandler::_folder_path == "")
+        {
+            EwsHandler::search_mails(service);
+        }
+        else
+        {
+            EwsHandler::search_mails(service, EwsHandler::_folder_path);
+        }
+    }
     else
     {
         throw std::runtime_error("No valid action");
@@ -534,20 +629,319 @@ ews::containment_mode EwsHandler::get_containment_mode()
     {
         return ews::containment_mode::prefixed;
     }
-    else if (mode == "")
-    {
-        return ews::containment_mode::substring;
-    }
     else
     {
         return ews::containment_mode::substring;
     }
 }
 
-ews::contains EwsHandler::get_search_expression()
+ews::containment_comparison EwsHandler::get_containment_comparison()
 {
-    return ews::contains(ews::item_property_path::subject, "ess",
-                         ews::containment_mode::substring, ews::containment_comparison::ignore_case);
+    auto mode = EwsHandler::_containment_comparison;
+    if (mode == "exact")
+    {
+        return ews::containment_comparison::exact;
+    }
+    else if (mode == "ignore_case")
+    {
+        return ews::containment_comparison::ignore_case;
+    }
+    else if (mode == "ignore_non_spacing_characters")
+    {
+        return ews::containment_comparison::ignore_non_spacing_characters;
+    }
+    else if (mode == "loose")
+    {
+        return ews::containment_comparison::loose;
+    }
+    else
+    {
+        return ews::containment_comparison::loose;
+    }
+}
+
+ews::property_path EwsHandler::get_item_property_path()
+{
+    auto mode = EwsHandler::_item_property_path;
+
+    if (mode == "archive_tag")
+    {
+        return ews::item_property_path::archive_tag;
+    }
+    else if (mode == "attachments")
+    {
+        return ews::item_property_path::attachments;
+    }
+    else if (mode == "block_status")
+    {
+        return ews::item_property_path::block_status;
+    }
+    else if (mode == "body")
+    {
+        return ews::item_property_path::body;
+    }
+    else if (mode == "categories")
+    {
+        return ews::item_property_path::categories;
+    }
+    else if (mode == "conversation_id")
+    {
+        return ews::item_property_path::conversation_id;
+    }
+    else if (mode == "culture")
+    {
+        return ews::item_property_path::culture;
+    }
+    else if (mode == "date_time_created")
+    {
+        return ews::item_property_path::date_time_created;
+    }
+    else if (mode == "date_time_received")
+    {
+        return ews::item_property_path::date_time_received;
+    }
+    else if (mode == "date_time_sent")
+    {
+        return ews::item_property_path::date_time_sent;
+    }
+    else if (mode == "display_cc")
+    {
+        return ews::item_property_path::display_cc;
+    }
+    else if (mode == "display_to")
+    {
+        return ews::item_property_path::display_to;
+    }
+    else if (mode == "effective_rights")
+    {
+        return ews::item_property_path::effective_rights;
+    }
+    else if (mode == "entity_extraction_result")
+    {
+        return ews::item_property_path::entity_extraction_result;
+    }
+    else if (mode == "flag")
+    {
+        return ews::item_property_path::flag;
+    }
+    else if (mode == "grouping_action")
+    {
+        return ews::item_property_path::grouping_action;
+    }
+    else if (mode == "has_attachments")
+    {
+        // is_equal_to, true|false
+        return ews::item_property_path::has_attachments;
+    }
+    else if (mode == "has_blocked_images")
+    {
+        return ews::item_property_path::has_blocked_images;
+    }
+    else if (mode == "icon_index")
+    {
+        return ews::item_property_path::icon_index;
+    }
+    else if (mode == "importance")
+    {
+        return ews::item_property_path::importance;
+    }
+    else if (mode == "in_reply_to")
+    {
+        return ews::item_property_path::in_reply_to;
+    }
+    else if (mode == "instance_key")
+    {
+        return ews::item_property_path::instance_key;
+    }
+    else if (mode == "internet_message_headers")
+    {
+        return ews::item_property_path::internet_message_headers;
+    }
+    else if (mode == "is_associated")
+    {
+        return ews::item_property_path::is_associated;
+    }
+    else if (mode == "is_clutter")
+    {
+        return ews::item_property_path::is_clutter;
+    }
+    else if (mode == "is_draft")
+    {
+        return ews::item_property_path::is_draft;
+    }
+    else if (mode == "is_from_me")
+    {
+        return ews::item_property_path::is_from_me;
+    }
+    else if (mode == "is_resend")
+    {
+        return ews::item_property_path::is_resend;
+    }
+    else if (mode == "is_submitted")
+    {
+        return ews::item_property_path::is_submitted;
+    }
+    else if (mode == "is_unmodified")
+    {
+        return ews::item_property_path::is_unmodified;
+    }
+    else if (mode == "item_class")
+    {
+        return ews::item_property_path::item_class;
+    }
+    else if (mode == "item_id")
+    {
+        return ews::item_property_path::item_id;
+    }
+    else if (mode == "last_modified_name")
+    {
+        return ews::item_property_path::last_modified_name;
+    }
+    else if (mode == "last_modified_time")
+    {
+        return ews::item_property_path::last_modified_time;
+    }
+    else if (mode == "mime_content")
+    {
+        return ews::item_property_path::mime_content;
+    }
+    else if (mode == "mime_content_utf8")
+    {
+        return ews::item_property_path::mime_content_utf8;
+    }
+    else if (mode == "next_predicted_action")
+    {
+        return ews::item_property_path::next_predicted_action;
+    }
+    else if (mode == "normalized_body")
+    {
+        return ews::item_property_path::normalized_body;
+    }
+    else if (mode == "parent_folder_id")
+    {
+        return ews::item_property_path::parent_folder_id;
+    }
+    else if (mode == "policy_tag")
+    {
+        return ews::item_property_path::policy_tag;
+    }
+    else if (mode == "predicted_action_reasons")
+    {
+        return ews::item_property_path::predicted_action_reasons;
+    }
+    else if (mode == "preview")
+    {
+        return ews::item_property_path::preview;
+    }
+    else if (mode == "reminder_due_by")
+    {
+        return ews::item_property_path::reminder_due_by;
+    }
+    else if (mode == "reminder_is_set")
+    {
+        return ews::item_property_path::reminder_is_set;
+    }
+    else if (mode == "reminder_minutes_before_start")
+    {
+        return ews::item_property_path::reminder_minutes_before_start;
+    }
+    else if (mode == "reminder_next_time")
+    {
+        return ews::item_property_path::reminder_next_time;
+    }
+    else if (mode == "response_objects")
+    {
+        return ews::item_property_path::response_objects;
+    }
+    else if (mode == "retention_date")
+    {
+        return ews::item_property_path::retention_date;
+    }
+    else if (mode == "rights_management_license_data")
+    {
+        return ews::item_property_path::rights_management_license_data;
+    }
+    else if (mode == "sensitivity")
+    {
+        return ews::item_property_path::sensitivity;
+    }
+    else if (mode == "size")
+    {
+        return ews::item_property_path::size;
+    }
+    else if (mode == "store_entry_id")
+    {
+        return ews::item_property_path::store_entry_id;
+    }
+    else if (mode == "subject")
+    {
+        // contains
+        return ews::item_property_path::subject;
+    }
+    else if (mode == "text_body")
+    {
+        return ews::item_property_path::text_body;
+    }
+    else if (mode == "unique_body")
+    {
+        return ews::item_property_path::unique_body;
+    }
+    else if (mode == "web_client_edit_from_query_string")
+    {
+        return ews::item_property_path::web_client_edit_from_query_string;
+    }
+    else if (mode == "web_client_read_from_query_string")
+    {
+        return ews::item_property_path::web_client_read_from_query_string;
+    }
+    else
+    {
+        return ews::item_property_path::subject;
+    }
+}
+
+ews::search_expression EwsHandler::get_search_expression()
+{
+    auto item_property_path = EwsHandler::get_item_property_path();
+    auto containment_mode = EwsHandler::get_containment_mode();
+    auto containment_comparison = EwsHandler::get_containment_comparison();
+    auto search_filter = EwsHandler::_search_filter;
+    auto search_type = EwsHandler::_search_type;
+    auto filter_type = EwsHandler::_search_filter_type;
+
+    if (search_type == "is_equal_to")
+    {
+        auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
+        return EwsHandler::get_is_equal_to(item_property_path, search_filter, filter_type);
+    }
+    else
+    {
+        return ews::contains(item_property_path,
+                             search_filter.c_str(),
+                             containment_mode,
+                             containment_comparison);
+    }
+}
+
+ews::is_equal_to EwsHandler::get_is_equal_to(ews::property_path property_path, const std::string &value, std::string type)
+{
+    auto data = EwsHandler::type_cast(value, type);
+    if (type == "int")
+    {
+        return ews::is_equal_to(property_path, std::get<int>(data));
+    }
+    if (type == "bool")
+    {
+        return ews::is_equal_to(property_path, std::get<bool>(data));
+    }
+    else if (type == "date_time")
+    {
+        return ews::is_equal_to(property_path, std::get<ews::date_time>(data));
+    }
+    else
+    {
+        return ews::is_equal_to(property_path, std::get<const char *>(data));
+    }
 }
 
 std::vector<std::string> EwsHandler::split(const std::string &s, char delimiter)
@@ -560,4 +954,65 @@ std::vector<std::string> EwsHandler::split(const std::string &s, char delimiter)
         tokens.push_back(token);
     }
     return tokens;
+}
+
+std::variant<int, bool, const char *, ews::date_time> EwsHandler::type_cast(const std::string &value, std::string type)
+{
+    if (type == "int")
+    {
+        try
+        {
+            int intValue = std::stoi(value);
+            return intValue;
+        }
+        catch (const std::invalid_argument &e)
+        {
+            throw std::invalid_argument("Invalid integer value: " + value);
+        }
+        catch (const std::out_of_range &e)
+        {
+            throw std::out_of_range("Integer value out of range: " + value);
+        }
+    }
+    else if (type == "bool")
+    {
+        if (value == "true" || value == "1")
+        {
+            return true;
+        }
+        else if (value == "false" || value == "0")
+        {
+            return false;
+        }
+        else
+        {
+            throw std::invalid_argument("Invalid boolean value: " + value);
+        }
+    }
+    else if (type == "const char*" || type == "text" || type == "string")
+    {
+        return value.c_str();
+    }
+    else if (type == "date_time" || type == "date")
+    {
+        try
+        {
+            int intValue = std::stoi(value);
+            ews::date_time d;
+            d.from_epoch(intValue);
+            return d;
+        }
+        catch (const std::invalid_argument &e)
+        {
+            throw std::invalid_argument("Invalid date_time epoch value: " + value);
+        }
+        catch (const std::out_of_range &e)
+        {
+            throw std::out_of_range("Date_time epoch int value out of range: " + value);
+        }
+    }
+    else
+    {
+        return value.c_str();
+    }
 }

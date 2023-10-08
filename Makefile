@@ -6,7 +6,7 @@ test_linux:
 	./build/tests
 
 windows:
-	x86_64-w64-mingw32-g++ -I/usr/include test.cpp -o test -lcurl
+	x86_64-w64-mingw32-g++ --std=c++17 -I/usr/include test.cpp -o test -lcurl
 
 clean:
 	rm -f build/*

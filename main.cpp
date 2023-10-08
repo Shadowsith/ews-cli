@@ -8,6 +8,7 @@
 
 #include "lib/EwsErrorData.hpp"
 #include "lib/EwsFolderData.hpp"
+#include "lib/EwsAttachmentData.hpp"
 #include "lib/EwsMailData.hpp"
 #include "lib/EwsHandler.hpp"
 
