@@ -28,6 +28,8 @@ public:
     static void get_mails(ews::service &service, std::string &folder_path);
     static void search_mails(ews::service &service);
     static void search_mails(ews::service &service, std::string &folder_path);
+    static void move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &folder_path, std::string &dest_folder_path);
+    static void move_mails(ews::service &service, std::string &folder_path, std::string &dest_folder_path);
     // static bool delete_folder(ews::service &service, std::string folder_path);
 
 private:
@@ -39,6 +41,9 @@ private:
     static std::string _option;
     static std::string _mailbox;
     static std::string _folder;
+    static std::string _folder_id;
+    static std::string _item_id;
+    static std::string _change_key;
     static std::string _standard_folder;
     static std::string _parent_folder;
     static std::string _folder_path;
@@ -67,6 +72,9 @@ std::string EwsHandler::_action;
 std::string EwsHandler::_option;
 std::string EwsHandler::_mailbox;
 std::string EwsHandler::_folder;
+std::string EwsHandler::_folder_id;
+std::string EwsHandler::_item_id;
+std::string EwsHandler::_change_key;
 std::string EwsHandler::_standard_folder;
 std::string EwsHandler::_parent_folder;
 std::string EwsHandler::_folder_path;
@@ -88,6 +96,9 @@ void EwsHandler::init(const std::vector<std::string> &args)
         {"--password", &EwsHandler::_password},
         {"--mailbox", &EwsHandler::_mailbox},
         {"--folder", &EwsHandler::_folder},
+        {"--folder-id", &EwsHandler::_folder_id},
+        {"--item-id", &EwsHandler::_item_id},
+        {"--change-key", &EwsHandler::_change_key},
         {"--standard-folder", &EwsHandler::_standard_folder},
         {"--parent-folder", &EwsHandler::_parent_folder},
         {"--folder-path", &EwsHandler::_folder_path},
@@ -435,15 +446,8 @@ void EwsHandler::search_mails(ews::service &service)
     auto standard_folder_id = EwsHandler::get_standard_folder_id();
     std::vector<ews::item_id> item_ids;
 
-    if (EwsHandler::_search_filter != "")
-    {
-        auto search_expression = EwsHandler::get_search_expression();
-        item_ids = service.find_item(standard_folder_id, search_expression);
-    }
-    else
-    {
-        item_ids = service.find_item(standard_folder_id);
-    }
+    auto search_expression = EwsHandler::get_search_expression();
+    item_ids = service.find_item(standard_folder_id, search_expression);
 
     std::vector<EwsMailData> list = std::vector<EwsMailData>();
     nlohmann::json j;
@@ -465,24 +469,46 @@ void EwsHandler::search_mails(ews::service &service, std::string &folder_path)
     auto search_expression = EwsHandler::get_search_expression();
     item_ids = service.find_item(folder.get_folder_id(), search_expression);
 
-    /*
-        if (EwsHandler::_search_filter != "")
-        {
-            auto search_expression = EwsHandler::get_search_expression();
-            item_ids = service.find_item(folder.get_folder_id(), search_expression);
-        }
-        else
-        {
-            item_ids = service.find_item(folder.get_folder_id());
-        }
-    */
+    std::vector<EwsMailData> list = std::vector<EwsMailData>();
+
+    for (const auto &id : item_ids)
+    {
+        auto msg = service.get_message(id);
+        auto data = EwsMailData(service, msg, folder);
+        list.push_back(data);
+        auto j = data.to_json();
+        std::cout << j.dump(4) << std::endl;
+    }
+}
+
+void EwsHandler::move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &folder_path, std::string &dest_folder_path)
+{
+    auto folder = EwsHandler::find_folder(service, folder_path);
+    auto dest_folder = EwsHandler::find_folder(service, dest_folder_path);
+    ews::item_id id(item_id, change_key);
+
+    auto moved_id = service.move_item(id, dest_folder.get_folder_id());
+    auto msg = service.get_message(moved_id);
+    auto data = EwsMailData(service, msg, dest_folder);
+    std::cout << data.to_json().dump(4) << std::endl;
+}
+
+void EwsHandler::move_mails(ews::service &service, std::string &folder_path, std::string &dest_folder_path)
+{
+    auto folder = EwsHandler::find_folder(service, folder_path);
+    auto dest_folder = EwsHandler::find_folder(service, dest_folder_path);
+
+    auto search_expression = EwsHandler::get_search_expression();
+    auto item_ids = service.find_item(folder.get_folder_id(), search_expression);
+
+    service.move_item(item_ids, dest_folder.get_folder_id());
 
     std::vector<EwsMailData> list = std::vector<EwsMailData>();
 
     for (const auto &id : item_ids)
     {
         auto msg = service.get_message(id);
-        auto data = EwsMailData(service, msg);
+        auto data = EwsMailData(service, msg, dest_folder);
         list.push_back(data);
         auto j = data.to_json();
         std::cout << j.dump(4) << std::endl;
@@ -592,16 +618,13 @@ void EwsHandler::handle_action(ews::service &service)
             EwsHandler::search_mails(service, EwsHandler::_folder_path);
         }
     }
+    else if (a == "move_mail")
+    {
+        EwsHandler::move_mail(service, EwsHandler::_item_id, EwsHandler::_change_key, EwsHandler::_folder_path, EwsHandler::_dest_folder_path);
+    }
     else if (a == "move_mails")
     {
-        if (EwsHandler::_folder_path == "")
-        {
-            EwsHandler::search_mails(service);
-        }
-        else
-        {
-            EwsHandler::search_mails(service, EwsHandler::_folder_path);
-        }
+        EwsHandler::move_mails(service, EwsHandler::_folder_path, EwsHandler::_dest_folder_path);
     }
     else
     {
@@ -656,7 +679,7 @@ ews::containment_comparison EwsHandler::get_containment_comparison()
     }
     else
     {
-        return ews::containment_comparison::loose;
+        return ews::containment_comparison::ignore_case;
     }
 }
 
@@ -916,10 +939,11 @@ ews::search_expression EwsHandler::get_search_expression()
     }
     else
     {
+        const char *filter = EwsHandler::_search_filter.c_str();
         return ews::contains(item_property_path,
-                             search_filter.c_str(),
-                             containment_mode,
-                             containment_comparison);
+                                  filter,
+                                  containment_mode,
+                                  containment_comparison);
     }
 }
 
@@ -991,7 +1015,8 @@ std::variant<int, bool, const char *, ews::date_time> EwsHandler::type_cast(cons
     }
     else if (type == "const char*" || type == "text" || type == "string")
     {
-        return value.c_str();
+        const char *val = value.c_str();
+        return val;
     }
     else if (type == "date_time" || type == "date")
     {
@@ -1013,6 +1038,7 @@ std::variant<int, bool, const char *, ews::date_time> EwsHandler::type_cast(cons
     }
     else
     {
-        return value.c_str();
+        const char *val = value.c_str();
+        return val;
     }
 }

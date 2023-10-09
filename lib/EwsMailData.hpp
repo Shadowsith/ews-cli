@@ -10,6 +10,7 @@ class EwsMailData
 public:
     EwsMailData();
     EwsMailData(ews::service &service, ews::message &message);
+    EwsMailData(ews::service &service, ews::message &message, ews::folder &folder);
 
     nlohmann::json to_json();
 
@@ -28,6 +29,7 @@ public:
 
 private:
     std::string _item_id;
+    std::string _item_change_key;
     std::string _sender;
     std::string _subject;
     std::string _body;
@@ -36,6 +38,8 @@ private:
     std::string _date_time_created;
     std::string _date_time_received;
     std::string _date_time_sent;
+    std::string _folder_id;
+    std::string _folder_name;
 
     std::vector<std::string> _to_recipients;
     std::vector<std::string> _cc_recipients;
@@ -45,6 +49,13 @@ private:
 
 EwsMailData::EwsMailData()
 {
+}
+
+EwsMailData::EwsMailData(ews::service &service, ews::message &message, ews::folder &folder)
+{
+    _folder_id = folder.get_folder_id().id();
+    _folder_name = folder.get_display_name();
+    from_message(service, message);
 }
 
 EwsMailData::EwsMailData(ews::service &service, ews::message &message)
@@ -85,6 +96,7 @@ void EwsMailData::set_body(std::string body)
 void EwsMailData::from_message(ews::service &service, ews::message &message)
 {
     _item_id = message.get_item_id().id();
+    _item_change_key = message.get_item_id().change_key();
     _subject = message.get_subject();
     _body = message.get_body().content();
     _sender = message.get_from().value();
@@ -142,6 +154,7 @@ nlohmann::json EwsMailData::to_json()
 {
     nlohmann::json j;
     j["item_id"] = _item_id;
+    j["item_change_key"] = _item_change_key;
     j["sender"] = _sender;
     j["subject"] = _subject;
     j["body"] = _body;
@@ -151,8 +164,10 @@ nlohmann::json EwsMailData::to_json()
     j["date_time_created"] = _date_time_created;
     j["date_time_received"] = _date_time_received;
     j["date_time_sent"] = _date_time_sent;
-    j["has_attachements"] = _has_attachments;
     j["priority"] = _importance;
+    j["folder_id"] = _folder_id;
+    j["folder_name"] = _folder_name;
+    j["has_attachements"] = _has_attachments;
 
     if (_has_attachments)
     {
