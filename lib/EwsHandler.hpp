@@ -60,6 +60,11 @@ private:
     static ews::property_path get_item_property_path();
     static ews::search_expression get_search_expression();
     static ews::is_equal_to get_is_equal_to(ews::property_path property_path, const std::string &value, std::string type);
+    static ews::is_not_equal_to get_is_not_equal_to(ews::property_path property_path, const std::string &value, std::string type);
+    static ews::is_greater_than get_is_greater_than(ews::property_path property_path, const std::string &value, std::string type);
+    static ews::is_greater_than_or_equal_to get_is_greater_than_or_equal_to(ews::property_path property_path, const std::string &value, std::string type);
+    static ews::is_less_than get_is_less_than(ews::property_path property_path, const std::string &value, std::string type);
+    static ews::is_less_than_or_equal_to get_is_less_than_or_equal_to(ews::property_path property_path, const std::string &value, std::string type);
     static std::vector<std::string> split(const std::string &s, char delimiter);
     static std::variant<int, bool, const char *, ews::date_time> type_cast(const std::string &value, std::string type);
 };
@@ -937,13 +942,38 @@ ews::search_expression EwsHandler::get_search_expression()
         auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
         return EwsHandler::get_is_equal_to(item_property_path, search_filter, filter_type);
     }
+    if (search_type == "is_not_equal_to")
+    {
+        auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
+        return EwsHandler::get_is_not_equal_to(item_property_path, search_filter, filter_type);
+    }
+    if (search_type == "is_greater_than")
+    {
+        auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
+        return EwsHandler::get_is_greater_than(item_property_path, search_filter, filter_type);
+    }
+    if (search_type == "is_greater_than_or_equal_to")
+    {
+        auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
+        return EwsHandler::get_is_greater_than_or_equal_to(item_property_path, search_filter, filter_type);
+    }
+    if (search_type == "is_less_than")
+    {
+        auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
+        return EwsHandler::get_is_less_than(item_property_path, search_filter, filter_type);
+    }
+    if (search_type == "is_less_than_or_equal_to")
+    {
+        auto data = EwsHandler::type_cast(search_filter, EwsHandler::_search_filter_type);
+        return EwsHandler::get_is_less_than_or_equal_to(item_property_path, search_filter, filter_type);
+    }
     else
     {
         const char *filter = EwsHandler::_search_filter.c_str();
         return ews::contains(item_property_path,
-                                  filter,
-                                  containment_mode,
-                                  containment_comparison);
+                             filter,
+                             containment_mode,
+                             containment_comparison);
     }
 }
 
@@ -965,6 +995,111 @@ ews::is_equal_to EwsHandler::get_is_equal_to(ews::property_path property_path, c
     else
     {
         return ews::is_equal_to(property_path, std::get<const char *>(data));
+    }
+}
+
+ews::is_not_equal_to EwsHandler::get_is_not_equal_to(ews::property_path property_path, const std::string &value, std::string type)
+{
+    auto data = EwsHandler::type_cast(value, type);
+    if (type == "int")
+    {
+        return ews::is_not_equal_to(property_path, std::get<int>(data));
+    }
+    if (type == "bool")
+    {
+        return ews::is_not_equal_to(property_path, std::get<bool>(data));
+    }
+    else if (type == "date_time")
+    {
+        return ews::is_not_equal_to(property_path, std::get<ews::date_time>(data));
+    }
+    else
+    {
+        return ews::is_not_equal_to(property_path, std::get<const char *>(data));
+    }
+}
+
+ews::is_greater_than EwsHandler::get_is_greater_than(ews::property_path property_path, const std::string &value, std::string type)
+{
+    auto data = EwsHandler::type_cast(value, type);
+    if (type == "int")
+    {
+        return ews::is_greater_than(property_path, std::get<int>(data));
+    }
+    if (type == "bool")
+    {
+        return ews::is_greater_than(property_path, std::get<bool>(data));
+    }
+    else if (type == "date_time")
+    {
+        return ews::is_greater_than(property_path, std::get<ews::date_time>(data));
+    }
+    else
+    {
+        return ews::is_greater_than(property_path, std::get<const char *>(data));
+    }
+}
+
+ews::is_greater_than_or_equal_to EwsHandler::get_is_greater_than_or_equal_to(ews::property_path property_path, const std::string &value, std::string type)
+{
+    auto data = EwsHandler::type_cast(value, type);
+    if (type == "int")
+    {
+        return ews::is_greater_than_or_equal_to(property_path, std::get<int>(data));
+    }
+    if (type == "bool")
+    {
+        return ews::is_greater_than_or_equal_to(property_path, std::get<bool>(data));
+    }
+    else if (type == "date_time")
+    {
+        return ews::is_greater_than_or_equal_to(property_path, std::get<ews::date_time>(data));
+    }
+    else
+    {
+        return ews::is_greater_than_or_equal_to(property_path, std::get<const char *>(data));
+    }
+}
+
+ews::is_less_than EwsHandler::get_is_less_than(ews::property_path property_path, const std::string &value, std::string type)
+{
+    auto data = EwsHandler::type_cast(value, type);
+    if (type == "int")
+    {
+        return ews::is_less_than(property_path, std::get<int>(data));
+    }
+    if (type == "bool")
+    {
+        return ews::is_less_than(property_path, std::get<bool>(data));
+    }
+    else if (type == "date_time")
+    {
+        return ews::is_less_than(property_path, std::get<ews::date_time>(data));
+    }
+    else
+    {
+        return ews::is_less_than(property_path, std::get<const char *>(data));
+    }
+}
+
+ews::is_less_than_or_equal_to EwsHandler::get_is_less_than_or_equal_to(ews::property_path property_path, const std::string &value, std::string type)
+{
+    auto data = EwsHandler::type_cast(value, type);
+    if (type == "int")
+    {
+        return ews::is_less_than_or_equal_to(property_path, std::get<int>(data));
+    }
+    if (type == "bool")
+    {
+        return ews::is_less_than_or_equal_to(property_path, std::get<bool>(data));
+    }
+    else if (type == "date_time")
+    {
+        return ews::is_less_than_or_equal_to(property_path, std::get<ews::date_time>(data));
+    }
+    else
+    {
+        return ews::is_less_than_or_equal_to(property_path, std::get<const char *>(data));
     }
 }
 
