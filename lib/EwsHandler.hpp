@@ -31,21 +31,24 @@ public:
     static void move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &folder_path, std::string &dest_folder_path);
     static void move_mails(ews::service &service, std::string &folder_path, std::string &dest_folder_path);
     // static bool delete_folder(ews::service &service, std::string folder_path);
+    static void show_help();
+    static void show_version();
 
 private:
+    static bool _show_help;
+    static bool _show_version;
+    static std::string _version;
     static std::string _server_uri;
     static std::string _domain;
     static std::string _username;
     static std::string _password;
     static std::string _action;
-    static std::string _option;
     static std::string _mailbox;
     static std::string _folder;
     static std::string _folder_id;
     static std::string _item_id;
     static std::string _change_key;
     static std::string _standard_folder;
-    static std::string _parent_folder;
     static std::string _folder_path;
     static std::string _dest_folder_path;
     static std::string _containment_mode;
@@ -69,19 +72,20 @@ private:
     static std::variant<int, bool, const char *, ews::date_time> type_cast(const std::string &value, std::string type);
 };
 
+bool EwsHandler::_show_help;
+bool EwsHandler::_show_version;
+std::string EwsHandler::_version = "0.0.1";
 std::string EwsHandler::_server_uri;
 std::string EwsHandler::_domain;
 std::string EwsHandler::_username;
 std::string EwsHandler::_password;
 std::string EwsHandler::_action;
-std::string EwsHandler::_option;
 std::string EwsHandler::_mailbox;
 std::string EwsHandler::_folder;
 std::string EwsHandler::_folder_id;
 std::string EwsHandler::_item_id;
 std::string EwsHandler::_change_key;
 std::string EwsHandler::_standard_folder;
-std::string EwsHandler::_parent_folder;
 std::string EwsHandler::_folder_path;
 std::string EwsHandler::_dest_folder_path;
 std::string EwsHandler::_containment_mode;
@@ -105,7 +109,6 @@ void EwsHandler::init(const std::vector<std::string> &args)
         {"--item-id", &EwsHandler::_item_id},
         {"--change-key", &EwsHandler::_change_key},
         {"--standard-folder", &EwsHandler::_standard_folder},
-        {"--parent-folder", &EwsHandler::_parent_folder},
         {"--folder-path", &EwsHandler::_folder_path},
         {"--dest-folder-path", &EwsHandler::_dest_folder_path},
         {"--containment-mode", &EwsHandler::_containment_mode},
@@ -114,16 +117,26 @@ void EwsHandler::init(const std::vector<std::string> &args)
         {"--search-type", &EwsHandler::_search_type},
         {"--search-filter", &EwsHandler::_search_filter},
         {"--search-filter-type", &EwsHandler::_search_filter_type},
-        {"--option", &EwsHandler::_option},
         {"--action", &EwsHandler::_action}};
 
     for (size_t i = 0; i < args.size(); i++)
     {
-        // Wenn das aktuelle Argument in paramMap ist und es gibt ein nächstes Argument
-        if (paramMap.find(args[i]) != paramMap.end() && i + 1 < args.size())
+        std::string val = args[i + 1];
+        if (val == "--help" || val == "-h")
         {
-            *paramMap[args[i]] = args[i + 1]; // Weise der zugehörigen Variable den Wert des nächsten Arguments zu
-            i++;                              // Überspringe den Wert
+            _show_help = true;
+            break;
+        }
+        else if (val == "--version" || val == "-v")
+        {
+            _show_version = true;
+            break;
+        }
+        // Wenn das aktuelle Argument in paramMap ist und es gibt ein nächstes Argument
+        else if (paramMap.find(args[i]) != paramMap.end() && i + 1 < args.size())
+        {
+            *paramMap[args[i]] = val; // Weise der zugehörigen Variable den Wert des nächsten Arguments zu
+            i++;                      // Überspringe den Wert
         }
     }
 }
@@ -223,7 +236,6 @@ ews::folder EwsHandler::find_folder(ews::service &service)
         auto f = service.get_folder(folder_id);
         if (f.get_display_name() == folder_name)
         {
-            std::cout << f.get_display_name() << std::endl;
             folder = f;
             break;
         }
@@ -572,6 +584,17 @@ static bool delete_folder(ews::service &service, std::string folder_path)
 
 void EwsHandler::handle_action(ews::service &service)
 {
+    if (_show_help)
+    {
+        show_help();
+        return;
+    }
+    if (_show_version)
+    {
+        show_version();
+        return;
+    }
+
     std::string a = EwsHandler::_action;
 
     if (a == "create_folder")
@@ -581,6 +604,7 @@ void EwsHandler::handle_action(ews::service &service)
     }
     else if (a == "find_folder")
     {
+        // TODO find folder by name only
         auto folder = EwsHandler::find_folder(service, EwsHandler::_folder_path);
         std::cout << EwsFolderData(folder, EwsHandler::_folder_path).to_json().dump() << std::endl;
     }
@@ -635,6 +659,63 @@ void EwsHandler::handle_action(ews::service &service)
     {
         throw std::runtime_error("No valid action");
     }
+}
+
+void EwsHandler::show_help()
+{
+    std::cout << "Usage: ews-cli [options] [arguments]"
+              << std::endl
+              << std::endl
+              << "Description:"
+              << std::endl
+              << "  This program is a CLI interface for Mircosoft EWS (Exchange Web Services)."
+              << std::endl
+              << "  The results are currently written exclusively in stdout.."
+              << std::endl
+              << std::endl
+              << "Options:"
+              << std::endl
+              << "  -h, --help          Show this help message and exit."
+              << std::endl
+              << "  -v, --version       Show program version and exit."
+              << std::endl
+              << "  --url               EWS url of the server (e.g. https://owa.example.com/EWS/Exchange.asmx). (always required)"
+              << std::endl
+              << "  --domain            EWS / Windows Domain. (always required)"
+              << std::endl
+              << "  --user              User name with which you want to log in. (always required)"
+              << std::endl
+              << "  --password          Password of user. (always required)"
+              << std::endl
+              << "  --mailbox           Name of the e-mail account within the EWS to be accessed (user must have access to it). (optional)"
+              << std::endl
+              << "  --action            Decides which EWS action is executed. (See Actions below)"
+              << std::endl
+              << "  --standard-folder   Sets the standard start folder (default inbox)."
+              << std::endl
+              << "                      Supported: inbox, junk, drafts, sent"
+              << std::endl
+              << "  --folder-path       Defines the order path for various actions. (/ seperated)"
+              << std::endl
+              << "                      If option is not used than the standard folder will be used"
+              << std::endl
+              << "  --dest-folder-path  Defines the order path for various actions (copy, move operations). (/ seperated)"
+              << std::endl
+              << std::endl
+              << "Actions:"
+              << std::endl
+              << "  get_mails        Get all mails of folder by folder path OR in standard folder"
+              << std::endl
+              << std::endl
+              << "Examples:"
+              << std::endl
+              << "  ews-cli --version"
+              << std::endl;
+}
+
+void EwsHandler::show_version()
+{
+    std::cout << "Version: ews-cli " << _version << std::endl;
 }
 
 // private
