@@ -24,13 +24,14 @@ public:
     static ews::folder find_folder(ews::service &service, std::string &folder_path);
     static std::vector<ews::folder> find_folders(ews::service &service, std::string &folder_path);
     static ews::folder create_folder(ews::service &service, std::string &folder_path);
+    static void delete_folder(ews::service &service, std::string &folder_path);
+    static void move_folder(ews::service &service, std::string &folder_path, std::string &dest_folder_path);
     static void get_mails(ews::service &service);
     static void get_mails(ews::service &service, std::string &folder_path);
     static void search_mails(ews::service &service);
     static void search_mails(ews::service &service, std::string &folder_path);
-    static void move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &folder_path, std::string &dest_folder_path);
+    static void move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &dest_folder_path);
     static void move_mails(ews::service &service, std::string &folder_path, std::string &dest_folder_path);
-    // static bool delete_folder(ews::service &service, std::string folder_path);
     static void show_help();
     static void show_version();
 
@@ -498,9 +499,8 @@ void EwsHandler::search_mails(ews::service &service, std::string &folder_path)
     }
 }
 
-void EwsHandler::move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &folder_path, std::string &dest_folder_path)
+void EwsHandler::move_mail(ews::service &service, std::string &item_id, std::string &change_key, std::string &dest_folder_path)
 {
-    auto folder = EwsHandler::find_folder(service, folder_path);
     auto dest_folder = EwsHandler::find_folder(service, dest_folder_path);
     ews::item_id id(item_id, change_key);
 
@@ -532,55 +532,23 @@ void EwsHandler::move_mails(ews::service &service, std::string &folder_path, std
     }
 }
 
-/*
-static bool delete_folder(ews::service &service, std::string folder_path)
+static void delete_folder(ews::service &service, std::string &folder_path)
 {
-    // Split the folder_path by '/'
-    std::vector<std::string> folders = EwsHandler::split(folder_path, '/');
-
-    // Ensure the root folder is "inbox" if no root is specified
-    if (folders.empty())
-    {
-        throw std::invalid_argument("Folder path cannot be empty");
-    }
-    else if (folders[0].empty())
-    {
-        folders[0] = "inbox";
-    }
-
-    ews::folder_id parent_folder_id = ews::distinguished_folder_id(EwsHandler::get_standard_folder());
-    ews::folder_id target_folder_id;
-    for (const auto &folder_name : folders)
-    {
-        ews::folder_id folder_id;
-        try
-        {
-            // Try to find the folder
-            folder_id = service.get_folder(parent_folder_id, folder_name).id();
-        }
-        catch (ews::exception &)
-        {
-            // Folder does not exist, throw exception
-            throw std::runtime_error("Folder not found: " + folder_name);
-        }
-        // Update the parent folder ID for the next iteration
-        parent_folder_id = folder_id;
-        target_folder_id = folder_id; // Keep track of the current folder ID
-    }
-
-    try
-    {
-        // Try to delete the target folder
-        service.delete_folder(target_folder_id);
-        return true;
-    }
-    catch (const ews::exception &)
-    {
-        // Failed to delete the folder
-        return false;
-    }
+    auto folder = EwsHandler::find_folder(service, folder_path);
+    auto d = EwsFolderData(folder);
+    service.delete_folder(folder.get_folder_id());
+    std::cout << d.to_json().dump(4) << std::endl;
 }
-*/
+
+static void move_folder(ews::service &service, std::string &folder_path, std::string &dest_folder_path)
+{
+    auto folder = EwsHandler::find_folder(service, folder_path);
+    auto dest_folder = EwsHandler::find_folder(service, dest_folder_path);
+    auto new_folder_id = service.move_folder(folder.get_folder_id(), dest_folder.get_folder_id());
+    auto new_folder = service.get_folder(new_folder_id);
+    auto d = EwsFolderData(new_folder);
+    std::cout << d.to_json().dump(4) << std::endl;
+}
 
 void EwsHandler::handle_action(ews::service &service)
 {
@@ -620,10 +588,11 @@ void EwsHandler::handle_action(ews::service &service)
     }
     else if (a == "delete_folder")
     {
-        std::string path = EwsHandler::_folder_path;
+        EwsHandler::delete_folder(service, EwsHandler::_folder_path);
     }
     else if (a == "move_folder")
     {
+        EwsHandler::move_folder(service, _folder_path, _dest_folder_path);
     }
     else if (a == "get_mails")
     {
@@ -649,7 +618,7 @@ void EwsHandler::handle_action(ews::service &service)
     }
     else if (a == "move_mail")
     {
-        EwsHandler::move_mail(service, EwsHandler::_item_id, EwsHandler::_change_key, EwsHandler::_folder_path, EwsHandler::_dest_folder_path);
+        EwsHandler::move_mail(service, EwsHandler::_item_id, EwsHandler::_change_key, EwsHandler::_dest_folder_path);
     }
     else if (a == "move_mails")
     {
@@ -704,7 +673,23 @@ void EwsHandler::show_help()
               << std::endl
               << "Actions:"
               << std::endl
+              << "  create_folder    Create folder by folder path"
+              << std::endl
+              << "  delete_folder    Delete folder by folder path"
+              << std::endl
+              << "  find_folder      Find folder by folder path"
+              << std::endl
+              << "  find_folders     Find folders by folder path"
+              << std::endl
               << "  get_mails        Get all mails of folder by folder path OR in standard folder"
+              << std::endl
+              << "  move_folder      Move folder from folder path to dest folder path"
+              << std::endl
+              << "  move_mail        Move specific mail by EWS item-id and change-key"
+              << std::endl
+              << "  move_mails       Move all mail from a folder-path to another dest-folder-path"
+              << std::endl
+              << "  search_mails     Search mails by search filter"
               << std::endl
               << std::endl
               << "Examples:"
