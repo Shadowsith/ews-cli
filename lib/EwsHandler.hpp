@@ -24,8 +24,8 @@ public:
     static ews::folder find_folder(ews::service &service, std::string &folder_path);
     static std::vector<ews::folder> find_folders(ews::service &service, std::string &folder_path);
     static ews::folder create_folder(ews::service &service, std::string &folder_path);
-    static void delete_folder(ews::service &service, std::string &folder_path);
-    static void move_folder(ews::service &service, std::string &folder_path, std::string &dest_folder_path);
+    // static void delete_folder(ews::service &service, std::string &folder_path);
+    // static void move_folder(ews::service &service, std::string &folder_path, std::string &dest_folder_path);
     static void get_mails(ews::service &service);
     static void get_mails(ews::service &service, std::string &folder_path);
     static void search_mails(ews::service &service);
@@ -588,11 +588,11 @@ void EwsHandler::handle_action(ews::service &service)
     }
     else if (a == "delete_folder")
     {
-        EwsHandler::delete_folder(service, EwsHandler::_folder_path);
+        // EwsHandler::delete_folder(service, EwsHandler::_folder_path);
     }
     else if (a == "move_folder")
     {
-        EwsHandler::move_folder(service, _folder_path, _dest_folder_path);
+        // EwsHandler::move_folder(service, _folder_path, _dest_folder_path);
     }
     else if (a == "get_mails")
     {
